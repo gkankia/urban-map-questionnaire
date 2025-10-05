@@ -352,7 +352,7 @@
             try {
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: SPREADSHEET_ID,
-                    range: 'Responses!A2:J'
+                    range: 'Responses!A2:J2'
                 });
                 
                 const rows = response.result.values || [];
