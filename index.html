@@ -198,9 +198,9 @@
     <script>
         // GOOGLE SHEETS API CONFIGURATION
         // Replace these with your credentials from Google Cloud Console
-        const CLIENT_ID = '233200756171-j1cncfsln826akqvc5dvdk7db9rrqtug.apps.googleusercontent.com';
-        const API_KEY = 'AIzaSyBhG_FVUHo8UiYi6SgsnrsUDhEiobzvGio';
-        const SPREADSHEET_ID = '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk'; // Create a Google Sheet and paste its ID here
+        const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+        const API_KEY = 'YOUR_API_KEY';
+        const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID'; // Create a Google Sheet and paste its ID here
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         
@@ -217,8 +217,7 @@
             'ტყე', 'ქვა', 'ცა', 'მიწა', 'ვარსკვლავი', 'მთვარე', 'ნისლი', 'თოვლი', 'წვიმა', 'რადიო',
             'წიგნი', 'სახლი', 'გზა', 'ხიდი', 'კარი', 'ფანჯარა', 'ბაღი', 'ეზო', 'ქუჩა', 'მოედანი',
             'ციხე', 'ეკლესია', 'მუზეუმი', 'პარკი', 'ბულვარი', 'სკვერი', 'ფონტანი', 'ძეგლი', 'თეატრი', 'კინო',
-            'ყურძენი', 'ვაშლი', 'მსხალი', 'ატამი', 'ფორთოხალი', 'ლიმონი', 'ჟოლო', 'კივი', 'ბანანი', 'საზამთრო', 
-            'ქოცი', 'ნაცი', 'ოლიგარქია', 'რუსთაველი', 'ბიძინახუი', 
+            'ყურძენი', 'ვაშლი', 'მსხალი', 'ატამი', 'ფორთოხალი', 'ლიმონი', 'ჟოლო', 'კივი', 'ბანანი', 'საზამთრო'
         ];
         
         mapboxgl.accessToken = "pk.eyJ1Ijoiam9yam9uZTkwIiwiYSI6ImNrZ3R6M2FvdTBwbmwycXBibGRqM2w2enYifQ.BxjvFSGqefuC9yFCrXC-nQ";
@@ -290,31 +289,29 @@
         
         function maybeAutoConnect() {
             if (gapiInited && gisInited) {
+                // Auto-connect silently
                 tokenClient.callback = async (resp) => {
                     if (resp.error !== undefined) {
-                        updateConnectionStatus(false, 'დაჭირეთ რომ დაუკავშირდეთ');
+                        updateConnectionStatus(false, 'შეცდომა დაკავშირებისას');
                         return;
                     }
                     updateConnectionStatus(true);
                     await loadDataFromSheets();
                 };
                 
-                // Check if already has token
-                const token = gapi.client.getToken();
-                if (token !== null) {
+                // Try silent auth first
+                if (gapi.client.getToken() === null) {
+                    tokenClient.requestAccessToken({prompt: ''});
+                } else {
                     updateConnectionStatus(true);
                     loadDataFromSheets();
-                } else {
-                    // First time - need user interaction
-                    updateConnectionStatus(false, 'საჭიროა ავტორიზაცია');
-                    // You'll need a button for first-time auth
                 }
             }
         }
         
         // Send data to Google Sheets (background)
         async function sendToGoogleSheets(data) {
-            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk') {
+            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID') {
                 return false;
             }
             
@@ -334,7 +331,7 @@
                 
                 await gapi.client.sheets.spreadsheets.values.append({
                     spreadsheetId: SPREADSHEET_ID,
-                    range: 'Sheet1!A:J',
+                    range: 'Responses!A:J',
                     valueInputOption: 'RAW',
                     resource: { values: values }
                 });
@@ -348,14 +345,14 @@
         
         // Load data from Google Sheets (background)
         async function loadDataFromSheets() {
-            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk') {
+            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID') {
                 return;
             }
             
             try {
                 const response = await gapi.client.sheets.spreadsheets.values.get({
                     spreadsheetId: SPREADSHEET_ID,
-                    range: 'Sheet1!A2:J'
+                    range: 'Responses!A2:J'
                 });
                 
                 const rows = response.result.values || [];
@@ -620,7 +617,7 @@
             const formData = new FormData(e.target);
             const center = getCellCenter(currentCell);
             const gridName = generateThreeWordName(currentCell);
-
+            
             const response = {
                 age: formData.get('age'),
                 gender: formData.get('gender'),
@@ -633,28 +630,18 @@
                 lat: center[1],
                 lng: center[0]
             };
-
-            // Send to Google Apps Script
-            try {
-                await fetch('https://script.google.com/macros/s/AKfycbwEeMFvA2P2gEcyJPM4UzsE0OFIRA60bRMA9UqO0G8S3hvXbUblI17bhQJ9L3GaeUph/exec', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(response)
-            })
-            .then(r => r.json())
-            .then(console.log);
-                alert('მადლობა! თქვენი პასუხი შენახულია.');
-            } catch (err) {
-                console.error(err);
-                alert('შეცდომა მონაცემის გაგზავნისას');
-            }
-
-            // Update locally
+            
+            // Save locally
             if (!gridData[currentCell]) gridData[currentCell] = [];
             gridData[currentCell].push(response);
-
-            e.target.reset();
+            
+            // Send to Google Sheets in background
+            sendToGoogleSheets(response);
+            
+            alert('მადლობა! თქვენი პასუხი შენახულია.');
+            
             modal.style.display = 'none';
+            e.target.reset();
             updateGridLayer();
             updateDataStatus();
         };
