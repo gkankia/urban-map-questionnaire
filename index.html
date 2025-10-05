@@ -9,7 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
-    <script src="https://apis.google.com/js/api.js"></script>
 
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -150,8 +149,8 @@
                         • პასუხები ავტომატურად ინახება Google Sheets-ში
                     </p>
                     <div style="font-size: 11px; margin-top: 10px; padding: 8px; background: #f5f5f5; border-radius: 3px;">
-                        <span class="status-indicator" id="statusDot"></span>
-                        <span id="connectionStatus">ინიციალიზაცია...</span>
+                        <span class="status-indicator status-connected"></span>
+                        <span>მზადაა მუშაობისთვის</span>
                     </div>
                 </div>
                 
@@ -196,20 +195,9 @@
     </div>
 
     <script>
-        // GOOGLE SHEETS API CONFIGURATION
-        // Replace these with your credentials from Google Cloud Console
-        const CLIENT_ID = '233200756171-j1cncfsln826akqvc5dvdk7db9rrqtug.apps.googleusercontent.com';
-        const API_KEY = 'AIzaSyBhG_FVUHo8UiYi6SgsnrsUDhEiobzvGio';
-        const SPREADSHEET_ID = '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk'; // Create a Google Sheet and paste its ID here
-        const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
-        const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
-        
-        let tokenClient;
-        let gapiInited = false;
-        let gisInited = false;
-        let currentTab = 'survey';
-        let resultsMode = 'walking';
-        let isGoogleConnected = false;
+        // CONFIGURATION - Replace with your Apps Script deployment URLs
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLnCoptNE5JCVOwthMVmj42_QpAtnDGyjzhTZIFsh9iBKADW6qWelWY/exec';
+        const APPS_SCRIPT_READ_URL = '/.netlify/functions/getData'; // Same URL, will handle GET requests
         
         // Georgian word list for three-word names
         const GEORGIAN_WORDS = [
@@ -234,7 +222,9 @@
         let marker = null;
         let gridData = {};
         let currentCell = null;
-        const GRID_SIZE = 0.0018; // ~200 meters in degrees
+        let currentTab = 'survey';
+        let resultsMode = 'walking';
+        const GRID_SIZE = 0.0018; // ~200 meters
         
         // Generate three-word name from cell coordinates
         function generateThreeWordName(cellId) {
@@ -248,159 +238,54 @@
             return `${word1}.${word2}.${word3}`;
         }
         
-        // Update connection status
-        function updateConnectionStatus(connected, message = '') {
-            isGoogleConnected = connected;
-            const statusDot = document.getElementById('statusDot');
-            const statusText = document.getElementById('connectionStatus');
-            
-            if (connected) {
-                statusDot.className = 'status-indicator status-connected';
-                statusText.textContent = message || 'დაკავშირებულია Google Sheets-თან';
-            } else {
-                statusDot.className = 'status-indicator status-disconnected';
-                statusText.textContent = message || 'არ არის დაკავშირებული';
-            }
-        }
-        
-        // Initialize Google API
-        function gapiLoaded() {
-            gapi.load('client', initializeGapiClient);
-        }
-        
-        async function initializeGapiClient() {
-            await gapi.client.init({
-                apiKey: API_KEY,
-                discoveryDocs: [DISCOVERY_DOC],
-            });
-            gapiInited = true;
-            maybeAutoConnect();
-        }
-        
-        function gisLoaded() {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: '',
-            });
-            gisInited = true;
-            maybeAutoConnect();
-        }
-        
-        function maybeAutoConnect() {
-            if (gapiInited && gisInited) {
-                // Auto-connect silently
-                tokenClient.callback = async (resp) => {
-                    if (resp.error !== undefined) {
-                        updateConnectionStatus(false, 'შეცდომა დაკავშირებისას');
-                        return;
-                    }
-                    updateConnectionStatus(true);
-                    await loadDataFromSheets();
-                };
-                
-                // Try silent auth first
-                if (gapi.client.getToken() === null) {
-                    tokenClient.requestAccessToken({prompt: ''});
-                } else {
-                    updateConnectionStatus(true);
-                    loadDataFromSheets();
-                }
-            }
-        }
-        
-        // Send data to Google Sheets (background)
-        async function sendToGoogleSheets(data) {
-            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk') {
-                return false;
-            }
-            
-            try {
-                const values = [[
-                    new Date(data.timestamp).toISOString(),
-                    data.gridName,
-                    data.cellId,
-                    data.lat.toFixed(6),
-                    data.lng.toFixed(6),
-                    data.age,
-                    data.gender,
-                    data.vote,
-                    data.economy,
-                    data.priority
-                ]];
-                
-                await gapi.client.sheets.spreadsheets.values.append({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: 'Responses!A:J',
-                    valueInputOption: 'RAW',
-                    resource: { values: values }
-                });
-                
-                return true;
-            } catch (err) {
-                console.error('Google Sheets error:', err);
-                return false;
-            }
-        }
-        
-        // Load data from Google Sheets (background)
-        async function loadDataFromSheets() {
-            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk') {
-                return;
-            }
-            
-            try {
-                const response = await gapi.client.sheets.spreadsheets.values.get({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: 'Responses!A2:J2'
-                });
-                
-                const rows = response.result.values || [];
-                gridData = {};
-                
-                rows.forEach(row => {
-                    if (row.length < 10) return;
-                    const cellId = row[2];
-                    const responseData = {
-                        timestamp: new Date(row[0]).getTime(),
-                        gridName: row[1],
-                        cellId: cellId,
-                        lat: parseFloat(row[3]),
-                        lng: parseFloat(row[4]),
-                        age: row[5],
-                        gender: row[6],
-                        vote: row[7],
-                        economy: row[8],
-                        priority: row[9]
-                    };
-                    
-                    if (!gridData[cellId]) gridData[cellId] = [];
-                    gridData[cellId].push(responseData);
-                });
-                
-                updateGridLayer();
-                updateDataStatus();
-            } catch (err) {
-                console.error('Error loading from Sheets:', err);
-            }
-        }
-        
-        // Initialize Google API when loaded
-        if (typeof gapi !== 'undefined') {
-            gapiLoaded();
-        }
-        window.addEventListener('load', () => {
-            if (typeof google !== 'undefined' && google.accounts) {
-                gisLoaded();
-            }
-        });
-        
         // Update data status
         function updateDataStatus() {
             const total = Object.values(gridData).reduce((sum, arr) => sum + arr.length, 0);
             const cells = Object.keys(gridData).length;
             document.getElementById('totalResponses').textContent = total;
             document.getElementById('totalCells').textContent = cells;
+        }
+        
+        // Load existing data from Google Sheets
+        async function loadDataFromSheets() {
+            try {
+                const response = await fetch(APPS_SCRIPT_READ_URL);
+                const data = await response.json();
+                
+                if (data.status === 'success' && data.rows) {
+                    gridData = {};
+                    
+                    data.rows.forEach(row => {
+                        const cellId = row[2];
+                        const responseData = {
+                            timestamp: row[0],
+                            gridName: row[1],
+                            cellId: cellId,
+                            lat: parseFloat(row[3]),
+                            lng: parseFloat(row[4]),
+                            age: row[5],
+                            gender: row[6],
+                            vote: row[7],
+                            economy: row[8],
+                            priority: row[9]
+                        };
+                        
+                        if (!gridData[cellId]) gridData[cellId] = [];
+                        gridData[cellId].push(responseData);
+                    });
+                    
+                    // Only update grid layer if map is loaded
+                    if (map.isStyleLoaded()) {
+                        updateGridLayer();
+                    }
+                    updateDataStatus();
+                    console.log(`Loaded ${data.rows.length} responses from Google Sheets`);
+                    console.log('Grid data cells:', Object.keys(gridData).length);
+                    console.log('Sample cell data:', Object.keys(gridData)[0], gridData[Object.keys(gridData)[0]]);
+                }
+            } catch (err) {
+                console.error('Failed to load data from Google Sheets:', err);
+            }
         }
         
         // Tab switching
@@ -412,7 +297,6 @@
             if (tab === 'survey') {
                 document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
                 document.getElementById('surveyTab').classList.add('active');
-                // Clear results marker
                 if (marker) marker.remove();
                 marker = null;
                 if (map.getSource('iso')) {
@@ -529,7 +413,6 @@
             let html = `<div class="aggregate-stat"><strong>სულ პასუხი:</strong> ${data.total}</div>`;
             html += `<div class="aggregate-stat"><strong>გადამკვეთი უჯრედები:</strong> ${data.grids.length}</div>`;
             
-            // Show grid names
             if (data.grids.length > 0) {
                 html += '<div class="aggregate-stat" style="max-height: 100px; overflow-y: auto;"><strong>უჯრედები:</strong><br>';
                 data.grids.forEach(grid => {
@@ -538,7 +421,6 @@
                 html += '</div>';
             }
             
-            // Vote distribution
             html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პარტიული გადანაწილება:</h4>';
             const sortedVotes = Object.entries(data.vote).sort((a, b) => b[1] - a[1]);
             sortedVotes.forEach(([key, count]) => {
@@ -554,7 +436,6 @@
                 </div>`;
             });
             
-            // Priority distribution
             html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პრიორიტეტები:</h4>';
             const sortedPriority = Object.entries(data.priority).sort((a, b) => b[1] - a[1]);
             sortedPriority.forEach(([key, count]) => {
@@ -570,7 +451,6 @@
                 </div>`;
             });
             
-            // Economy assessment
             html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">ეკონომიკის შეფასება:</h4>';
             const sortedEconomy = Object.entries(data.economy).sort((a, b) => b[1] - a[1]);
             sortedEconomy.forEach(([key, count]) => {
@@ -586,7 +466,6 @@
                 </div>`;
             });
             
-            // Demographics
             html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">დემოგრაფია:</h4>';
             html += '<div class="aggregate-stat"><strong>ასაკი:</strong><br>';
             Object.entries(data.age).sort().forEach(([key, count]) => {
@@ -619,27 +498,34 @@
             const gridName = generateThreeWordName(currentCell);
             
             const response = {
+                timestamp: new Date().toISOString(),
+                gridName: gridName,
+                cellId: currentCell,
+                lat: center[1],
+                lng: center[0],
                 age: formData.get('age'),
                 gender: formData.get('gender'),
                 vote: formData.get('vote'),
                 economy: formData.get('economy'),
-                priority: formData.get('priority'),
-                timestamp: Date.now(),
-                gridName: gridName,
-                cellId: currentCell,
-                lat: center[1],
-                lng: center[0]
+                priority: formData.get('priority')
             };
             
-            // Save locally
+            // Save locally first
             if (!gridData[currentCell]) gridData[currentCell] = [];
             gridData[currentCell].push(response);
             
-            // Send to Google Sheets in background
-            sendToGoogleSheets(response);
+            // Send to Google Sheets via Apps Script
+            try {
+                await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(response)
+                });
+                console.log('Data sent to Google Sheets successfully');
+            } catch (err) {
+                console.error('Failed to send to Google Sheets:', err);
+            }
             
             alert('მადლობა! თქვენი პასუხი შენახულია.');
-            
             modal.style.display = 'none';
             e.target.reset();
             updateGridLayer();
@@ -685,7 +571,6 @@
         // Map click handler
         map.on('click', (e) => {
             if (currentTab === 'survey') {
-                // Survey mode - click on grid cells to fill questionnaire
                 const features = map.queryRenderedFeatures(e.point, { layers: ['grid-layer'] });
                 
                 if (features.length > 0) {
@@ -703,7 +588,6 @@
                     modal.style.display = 'block';
                 }
             } else {
-                // Results mode - create isochrone and aggregate data
                 if (marker) marker.remove();
                 marker = new mapboxgl.Marker({ color: '#6c86cf' }).setLngLat(e.lngLat).addTo(map);
                 generateResultsIsochrone(e.lngLat);
@@ -722,7 +606,6 @@
                         map.getSource('iso').setData(data);
                     }
                     
-                    // Aggregate data within isochrone
                     if (data.features && data.features.length > 0) {
                         const aggregated = aggregateResultsInIsochrone(data.features[0]);
                         displayAggregatedResults(aggregated);
@@ -742,7 +625,6 @@
         
         // Initialize map layers
         map.on('load', () => {
-            // Grid layer
             map.addSource('grid', {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] }
@@ -778,7 +660,6 @@
                 }
             });
             
-            // Isochrone layer
             map.addSource('iso', {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] }
@@ -804,14 +685,15 @@
                 }
             });
             
+            // Load data from sheets after map is ready
+            loadDataFromSheets();
             updateGridLayer();
         });
         
         map.on('moveend', updateGridLayer);
         map.on('zoomend', updateGridLayer);
         
-        // Initial setup
-        updateConnectionStatus(false, 'ინიციალიზაცია...');
+        // Initial setup - but don't load data yet, wait for map to be ready
         updateDataStatus();
     </script>
 </body>
