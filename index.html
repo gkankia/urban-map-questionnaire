@@ -198,9 +198,9 @@
     <script>
         // GOOGLE SHEETS API CONFIGURATION
         // Replace these with your credentials from Google Cloud Console
-        const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
-        const API_KEY = 'YOUR_API_KEY';
-        const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID'; // Create a Google Sheet and paste its ID here
+        const CLIENT_ID = '233200756171-j1cncfsln826akqvc5dvdk7db9rrqtug.apps.googleusercontent.com';
+        const API_KEY = 'AIzaSyBhG_FVUHo8UiYi6SgsnrsUDhEiobzvGio';
+        const SPREADSHEET_ID = '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk'; // Create a Google Sheet and paste its ID here
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
         
@@ -311,7 +311,7 @@
         
         // Send data to Google Sheets (background)
         async function sendToGoogleSheets(data) {
-            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID') {
+            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk') {
                 return false;
             }
             
@@ -345,7 +345,7 @@
         
         // Load data from Google Sheets (background)
         async function loadDataFromSheets() {
-            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID') {
+            if (!isGoogleConnected || !SPREADSHEET_ID || SPREADSHEET_ID === '12aeeqeidNNydNBs-e7xbOMw0jhV_LQQhKJEgt1be9rk') {
                 return;
             }
             
