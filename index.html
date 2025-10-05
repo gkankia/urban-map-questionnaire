@@ -195,11 +195,10 @@
     </div>
 
     <script>
-        // CONFIGURATION - Replace with your Apps Script deployment URLs
+        // CONFIGURATION
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLnCoptNE5JCVOwthMVmj42_QpAtnDGyjzhTZIFsh9iBKADW6qWelWY/exec';
-        const APPS_SCRIPT_READ_URL = '/.netlify/functions/getData'; // Same URL, will handle GET requests
         
-        // Georgian word list for three-word names
+        // Georgian word list
         const GEORGIAN_WORDS = [
             'მზე', 'მთა', 'წყალი', 'ხე', 'ყვავილი', 'ქარი', 'ღრუბელი', 'მდინარე', 'ტბა', 'ველი',
             'ტყე', 'ქვა', 'ცა', 'მიწა', 'ვარსკვლავი', 'მთვარე', 'ნისლი', 'თოვლი', 'წვიმა', 'რადიო',
@@ -220,13 +219,13 @@
         map.addControl(new mapboxgl.NavigationControl());
         
         let marker = null;
-        let gridData = {};
-        let currentCell = null;
+        let surveyDataGeoJSON = { type: 'FeatureCollection', features: [] }; // GeoJSON format
+        let currentFeature = null;
         let currentTab = 'survey';
         let resultsMode = 'walking';
         const GRID_SIZE = 0.0018; // ~200 meters
         
-        // Generate three-word name from cell coordinates
+        // Generate three-word name
         function generateThreeWordName(cellId) {
             const [x, y] = cellId.split(',').map(Number);
             const hash = Math.abs((x * 73856093) ^ (y * 19349663));
@@ -238,53 +237,95 @@
             return `${word1}.${word2}.${word3}`;
         }
         
+        // Generate cell ID from coordinates
+        function getCellId(lng, lat) {
+            const x = Math.floor(lng / GRID_SIZE);
+            const y = Math.floor(lat / GRID_SIZE);
+            return `${x},${y}`;
+        }
+        
+        // Get cell bounds
+        function getCellBounds(cellId) {
+            const [x, y] = cellId.split(',').map(Number);
+            const minLng = x * GRID_SIZE;
+            const minLat = y * GRID_SIZE;
+            return [
+                [minLng, minLat],
+                [minLng + GRID_SIZE, minLat],
+                [minLng + GRID_SIZE, minLat + GRID_SIZE],
+                [minLng, minLat + GRID_SIZE],
+                [minLng, minLat]
+            ];
+        }
+        
+        // Get cell center
+        function getCellCenter(cellId) {
+            const bounds = getCellBounds(cellId);
+            return [(bounds[0][0] + bounds[2][0]) / 2, (bounds[0][1] + bounds[2][1]) / 2];
+        }
+        
         // Update data status
         function updateDataStatus() {
-            const total = Object.values(gridData).reduce((sum, arr) => sum + arr.length, 0);
-            const cells = Object.keys(gridData).length;
+            const total = surveyDataGeoJSON.features.reduce((sum, f) => sum + f.properties.responses.length, 0);
+            const cells = surveyDataGeoJSON.features.length;
             document.getElementById('totalResponses').textContent = total;
             document.getElementById('totalCells').textContent = cells;
         }
         
-        // Load existing data from Google Sheets
+        // Load data from Google Sheets and convert to GeoJSON
         async function loadDataFromSheets() {
             try {
-                const response = await fetch(APPS_SCRIPT_READ_URL);
+                const response = await fetch(APPS_SCRIPT_URL);
                 const data = await response.json();
                 
                 if (data.status === 'success' && data.rows) {
-                    gridData = {};
+                    const gridMap = {}; // Temporary map to group by gridName
                     
                     data.rows.forEach(row => {
+                        const gridName = row[1];
                         const cellId = row[2];
-                        const responseData = {
+                        const lat = parseFloat(row[3]);
+                        const lng = parseFloat(row[4]);
+                        
+                        if (!gridMap[gridName]) {
+                            const center = [lng, lat];
+                            gridMap[gridName] = {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: center
+                                },
+                                properties: {
+                                    gridName: gridName,
+                                    cellId: cellId,
+                                    responses: []
+                                }
+                            };
+                        }
+                        
+                        gridMap[gridName].properties.responses.push({
                             timestamp: row[0],
-                            gridName: row[1],
-                            cellId: cellId,
-                            lat: parseFloat(row[3]),
-                            lng: parseFloat(row[4]),
                             age: row[5],
                             gender: row[6],
                             vote: row[7],
                             economy: row[8],
                             priority: row[9]
-                        };
-                        
-                        if (!gridData[cellId]) gridData[cellId] = [];
-                        gridData[cellId].push(responseData);
+                        });
                     });
                     
-                    // Only update grid layer if map is loaded
-                    if (map.isStyleLoaded()) {
-                        updateGridLayer();
+                    surveyDataGeoJSON.features = Object.values(gridMap);
+                    
+                    if (map.isStyleLoaded() && map.getSource('survey-data')) {
+                        map.getSource('survey-data').setData(surveyDataGeoJSON);
                     }
+                    
+                    updateGridLayer();
                     updateDataStatus();
-                    console.log(`Loaded ${data.rows.length} responses from Google Sheets`);
-                    console.log('Grid data cells:', Object.keys(gridData).length);
-                    console.log('Sample cell data:', Object.keys(gridData)[0], gridData[Object.keys(gridData)[0]]);
+                    console.log(`Loaded ${data.rows.length} responses as ${surveyDataGeoJSON.features.length} grid features`);
+                    console.log('Sample feature:', surveyDataGeoJSON.features[0]);
                 }
             } catch (err) {
-                console.error('Failed to load data from Google Sheets:', err);
+                console.error('Failed to load data:', err);
             }
         }
         
@@ -315,33 +356,6 @@
             if (marker && currentTab === 'results') generateResultsIsochrone(marker.getLngLat());
         }
         
-        // Generate grid cell ID from coordinates
-        function getCellId(lng, lat) {
-            const x = Math.floor(lng / GRID_SIZE);
-            const y = Math.floor(lat / GRID_SIZE);
-            return `${x},${y}`;
-        }
-        
-        // Get cell bounds from ID
-        function getCellBounds(cellId) {
-            const [x, y] = cellId.split(',').map(Number);
-            const minLng = x * GRID_SIZE;
-            const minLat = y * GRID_SIZE;
-            return [
-                [minLng, minLat],
-                [minLng + GRID_SIZE, minLat],
-                [minLng + GRID_SIZE, minLat + GRID_SIZE],
-                [minLng, minLat + GRID_SIZE],
-                [minLng, minLat]
-            ];
-        }
-        
-        // Get cell center
-        function getCellCenter(cellId) {
-            const bounds = getCellBounds(cellId);
-            return [(bounds[0][0] + bounds[2][0]) / 2, (bounds[0][1] + bounds[2][1]) / 2];
-        }
-        
         // Aggregate results within isochrone
         function aggregateResultsInIsochrone(isochronePolygon) {
             const aggregated = {
@@ -354,27 +368,36 @@
                 grids: []
             };
             
-            Object.keys(gridData).forEach(cellId => {
-                const center = getCellCenter(cellId);
-                const point = turf.point(center);
+            console.log('Starting aggregation. Total features:', surveyDataGeoJSON.features.length);
+            
+            surveyDataGeoJSON.features.forEach(feature => {
+                const point = turf.point(feature.geometry.coordinates);
                 
-                if (turf.booleanPointInPolygon(point, isochronePolygon)) {
-                    aggregated.grids.push({
-                        name: generateThreeWordName(cellId),
-                        count: gridData[cellId].length
-                    });
-                    
-                    gridData[cellId].forEach(response => {
-                        aggregated.total++;
-                        aggregated.age[response.age] = (aggregated.age[response.age] || 0) + 1;
-                        aggregated.gender[response.gender] = (aggregated.gender[response.gender] || 0) + 1;
-                        aggregated.vote[response.vote] = (aggregated.vote[response.vote] || 0) + 1;
-                        aggregated.economy[response.economy] = (aggregated.economy[response.economy] || 0) + 1;
-                        aggregated.priority[response.priority] = (aggregated.priority[response.priority] || 0) + 1;
-                    });
+                try {
+                    if (turf.booleanPointInPolygon(point, isochronePolygon)) {
+                        const props = feature.properties;
+                        console.log('Feature inside isochrone:', props.gridName, 'at', feature.geometry.coordinates, 'responses:', props.responses.length);
+                        
+                        aggregated.grids.push({
+                            name: props.gridName,
+                            count: props.responses.length
+                        });
+                        
+                        props.responses.forEach(response => {
+                            aggregated.total++;
+                            if (response.age) aggregated.age[response.age] = (aggregated.age[response.age] || 0) + 1;
+                            if (response.gender) aggregated.gender[response.gender] = (aggregated.gender[response.gender] || 0) + 1;
+                            if (response.vote) aggregated.vote[response.vote] = (aggregated.vote[response.vote] || 0) + 1;
+                            if (response.economy) aggregated.economy[response.economy] = (aggregated.economy[response.economy] || 0) + 1;
+                            if (response.priority) aggregated.priority[response.priority] = (aggregated.priority[response.priority] || 0) + 1;
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error checking feature:', feature.properties.gridName, err);
                 }
             });
             
+            console.log('Aggregation complete. Total responses:', aggregated.total, 'Grids:', aggregated.grids.length);
             return aggregated;
         }
         
@@ -421,66 +444,76 @@
                 html += '</div>';
             }
             
-            html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პარტიული გადანაწილება:</h4>';
-            const sortedVotes = Object.entries(data.vote).sort((a, b) => b[1] - a[1]);
-            sortedVotes.forEach(([key, count]) => {
-                const pct = ((count / data.total) * 100).toFixed(1);
-                html += `<div class="aggregate-stat">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                        <span>${voteLabels[key] || key}</span>
-                        <span><strong>${count}</strong> (${pct}%)</span>
-                    </div>
-                    <div class="chart-bar" style="width: ${pct}%;">
-                        <span class="chart-label">${pct}%</span>
-                    </div>
-                </div>`;
-            });
+            if (Object.keys(data.vote).length > 0) {
+                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პარტიული გადანაწილება:</h4>';
+                const sortedVotes = Object.entries(data.vote).sort((a, b) => b[1] - a[1]);
+                sortedVotes.forEach(([key, count]) => {
+                    const pct = ((count / data.total) * 100).toFixed(1);
+                    html += `<div class="aggregate-stat">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                            <span>${voteLabels[key] || key}</span>
+                            <span><strong>${count}</strong> (${pct}%)</span>
+                        </div>
+                        <div class="chart-bar" style="width: ${pct}%;">
+                            <span class="chart-label">${pct}%</span>
+                        </div>
+                    </div>`;
+                });
+            }
             
-            html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პრიორიტეტები:</h4>';
-            const sortedPriority = Object.entries(data.priority).sort((a, b) => b[1] - a[1]);
-            sortedPriority.forEach(([key, count]) => {
-                const pct = ((count / data.total) * 100).toFixed(1);
-                html += `<div class="aggregate-stat">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                        <span>${priorityLabels[key] || key}</span>
-                        <span><strong>${count}</strong> (${pct}%)</span>
-                    </div>
-                    <div class="chart-bar" style="width: ${pct}%;">
-                        <span class="chart-label">${pct}%</span>
-                    </div>
-                </div>`;
-            });
+            if (Object.keys(data.priority).length > 0) {
+                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პრიორიტეტები:</h4>';
+                const sortedPriority = Object.entries(data.priority).sort((a, b) => b[1] - a[1]);
+                sortedPriority.forEach(([key, count]) => {
+                    const pct = ((count / data.total) * 100).toFixed(1);
+                    html += `<div class="aggregate-stat">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                            <span>${priorityLabels[key] || key}</span>
+                            <span><strong>${count}</strong> (${pct}%)</span>
+                        </div>
+                        <div class="chart-bar" style="width: ${pct}%;">
+                            <span class="chart-label">${pct}%</span>
+                        </div>
+                    </div>`;
+                });
+            }
             
-            html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">ეკონომიკის შეფასება:</h4>';
-            const sortedEconomy = Object.entries(data.economy).sort((a, b) => b[1] - a[1]);
-            sortedEconomy.forEach(([key, count]) => {
-                const pct = ((count / data.total) * 100).toFixed(1);
-                html += `<div class="aggregate-stat">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                        <span>${economyLabels[key] || key}</span>
-                        <span><strong>${count}</strong> (${pct}%)</span>
-                    </div>
-                    <div class="chart-bar" style="width: ${pct}%;">
-                        <span class="chart-label">${pct}%</span>
-                    </div>
-                </div>`;
-            });
+            if (Object.keys(data.economy).length > 0) {
+                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">ეკონომიკის შეფასება:</h4>';
+                const sortedEconomy = Object.entries(data.economy).sort((a, b) => b[1] - a[1]);
+                sortedEconomy.forEach(([key, count]) => {
+                    const pct = ((count / data.total) * 100).toFixed(1);
+                    html += `<div class="aggregate-stat">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                            <span>${economyLabels[key] || key}</span>
+                            <span><strong>${count}</strong> (${pct}%)</span>
+                        </div>
+                        <div class="chart-bar" style="width: ${pct}%;">
+                            <span class="chart-label">${pct}%</span>
+                        </div>
+                    </div>`;
+                });
+            }
             
             html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">დემოგრაფია:</h4>';
-            html += '<div class="aggregate-stat"><strong>ასაკი:</strong><br>';
-            Object.entries(data.age).sort().forEach(([key, count]) => {
-                const pct = ((count / data.total) * 100).toFixed(1);
-                html += `<span style="font-size: 11px;">${key}: ${count} (${pct}%)</span> | `;
-            });
-            html += '</div>';
+            if (Object.keys(data.age).length > 0) {
+                html += '<div class="aggregate-stat"><strong>ასაკი:</strong><br>';
+                Object.entries(data.age).sort().forEach(([key, count]) => {
+                    const pct = ((count / data.total) * 100).toFixed(1);
+                    html += `<span style="font-size: 11px;">${key}: ${count} (${pct}%)</span> | `;
+                });
+                html += '</div>';
+            }
             
-            html += '<div class="aggregate-stat"><strong>სქესი:</strong><br>';
-            const genderLabels = { male: 'მამრობითი', female: 'მდედრობითი', other: 'სხვა' };
-            Object.entries(data.gender).forEach(([key, count]) => {
-                const pct = ((count / data.total) * 100).toFixed(1);
-                html += `<span style="font-size: 11px;">${genderLabels[key] || key}: ${count} (${pct}%)</span> | `;
-            });
-            html += '</div>';
+            if (Object.keys(data.gender).length > 0) {
+                html += '<div class="aggregate-stat"><strong>სქესი:</strong><br>';
+                const genderLabels = { male: 'მამრობითი', female: 'მდედრობითი', other: 'სხვა' };
+                Object.entries(data.gender).forEach(([key, count]) => {
+                    const pct = ((count / data.total) * 100).toFixed(1);
+                    html += `<span style="font-size: 11px;">${genderLabels[key] || key}: ${count} (${pct}%)</span> | `;
+                });
+                html += '</div>';
+            }
             
             document.getElementById('aggregateContent').innerHTML = html;
         }
@@ -494,13 +527,14 @@
         document.getElementById('surveyForm').onsubmit = async (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
-            const center = getCellCenter(currentCell);
-            const gridName = generateThreeWordName(currentCell);
+            const cellId = currentFeature.properties.cellId;
+            const center = getCellCenter(cellId);
+            const gridName = currentFeature.properties.gridName;
             
             const response = {
                 timestamp: new Date().toISOString(),
                 gridName: gridName,
-                cellId: currentCell,
+                cellId: cellId,
                 lat: center[1],
                 lng: center[0],
                 age: formData.get('age'),
@@ -510,11 +544,39 @@
                 priority: formData.get('priority')
             };
             
-            // Save locally first
-            if (!gridData[currentCell]) gridData[currentCell] = [];
-            gridData[currentCell].push(response);
+            // Find existing feature or create new one
+            let feature = surveyDataGeoJSON.features.find(f => f.properties.gridName === gridName);
+            if (!feature) {
+                feature = {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: center
+                    },
+                    properties: {
+                        gridName: gridName,
+                        cellId: cellId,
+                        responses: []
+                    }
+                };
+                surveyDataGeoJSON.features.push(feature);
+            }
             
-            // Send to Google Sheets via Apps Script
+            feature.properties.responses.push({
+                timestamp: response.timestamp,
+                age: response.age,
+                gender: response.gender,
+                vote: response.vote,
+                economy: response.economy,
+                priority: response.priority
+            });
+            
+            // Update map source
+            if (map.getSource('survey-data')) {
+                map.getSource('survey-data').setData(surveyDataGeoJSON);
+            }
+            
+            // Send to Google Sheets
             try {
                 await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
@@ -541,21 +603,32 @@
             const maxLat = bounds.getNorth();
             
             const features = [];
+            const existingGrids = {};
+            
+            // Map existing survey data
+            surveyDataGeoJSON.features.forEach(f => {
+                existingGrids[f.properties.cellId] = {
+                    gridName: f.properties.gridName,
+                    count: f.properties.responses.length
+                };
+            });
             
             for (let lng = Math.floor(minLng / GRID_SIZE) * GRID_SIZE; lng <= maxLng; lng += GRID_SIZE) {
                 for (let lat = Math.floor(minLat / GRID_SIZE) * GRID_SIZE; lat <= maxLat; lat += GRID_SIZE) {
                     const cellId = getCellId(lng, lat);
                     const coords = getCellBounds(cellId);
-                    const count = gridData[cellId] ? gridData[cellId].length : 0;
+                    const existing = existingGrids[cellId];
+                    const count = existing ? existing.count : 0;
+                    const gridName = existing ? existing.gridName : generateThreeWordName(cellId);
                     
                     if (count > 0 || map.getZoom() > 12) {
                         features.push({
                             type: 'Feature',
                             properties: { 
                                 cellId, 
+                                gridName,
                                 count, 
-                                hasData: count > 0,
-                                gridName: generateThreeWordName(cellId)
+                                hasData: count > 0
                             },
                             geometry: { type: 'Polygon', coordinates: [coords] }
                         });
@@ -574,17 +647,23 @@
                 const features = map.queryRenderedFeatures(e.point, { layers: ['grid-layer'] });
                 
                 if (features.length > 0) {
-                    currentCell = features[0].properties.cellId;
-                    const count = gridData[currentCell] ? gridData[currentCell].length : 0;
-                    const center = getCellCenter(currentCell);
-                    const gridName = generateThreeWordName(currentCell);
+                    const props = features[0].properties;
+                    currentFeature = {
+                        properties: {
+                            cellId: props.cellId,
+                            gridName: props.gridName,
+                            count: props.count
+                        }
+                    };
+                    
+                    const center = getCellCenter(props.cellId);
                     
                     document.getElementById('cellInfo').innerHTML = 
-                        `<div class="three-word-name">${gridName}</div>` +
-                        `<strong>Grid ID:</strong> ${currentCell}<br>` +
+                        `<div class="three-word-name">${props.gridName}</div>` +
+                        `<strong>Grid ID:</strong> ${props.cellId}<br>` +
                         `<strong>ცენტრი:</strong> ${center[1].toFixed(6)}, ${center[0].toFixed(6)}<br>` +
                         `<strong>ზომა:</strong> ~200m x 200m<br>` +
-                        `<strong>არსებული პასუხები:</strong> ${count}`;
+                        `<strong>არსებული პასუხები:</strong> ${props.count}`;
                     modal.style.display = 'block';
                 }
             } else {
@@ -594,14 +673,18 @@
             }
         });
         
-        // Generate isochrone for results analysis
+        // Generate isochrone
         function generateResultsIsochrone(lngLat) {
             const time = document.getElementById('timeResults').value;
             const url = `https://api.mapbox.com/isochrone/v1/mapbox/${resultsMode}/${lngLat.lng},${lngLat.lat}?contours_minutes=${time}&polygons=true&access_token=${mapboxgl.accessToken}`;
             
+            console.log('Generating isochrone. Survey features available:', surveyDataGeoJSON.features.length);
+            
             fetch(url)
                 .then(r => r.json())
                 .then(data => {
+                    console.log('Isochrone received');
+                    
                     if (map.getSource('iso')) {
                         map.getSource('iso').setData(data);
                     }
@@ -610,21 +693,25 @@
                         const aggregated = aggregateResultsInIsochrone(data.features[0]);
                         displayAggregatedResults(aggregated);
                         document.getElementById('aggregateResults').style.display = 'block';
+                    } else {
+                        console.warn('No isochrone features returned');
+                        document.getElementById('aggregateResults').style.display = 'none';
                     }
                 })
                 .catch(err => {
                     console.error('Isochrone error:', err);
-                    alert('შეცდომა იზოქრონის შექმნისას');
+                    alert('შეცდომა იზოქრონის შექმნისას: ' + err.message);
                 });
         }
         
-        // Time change for results
+        // Time change
         document.getElementById('timeResults').onchange = () => {
             if (marker && currentTab === 'results') generateResultsIsochrone(marker.getLngLat());
         };
         
         // Initialize map layers
         map.on('load', () => {
+            // Grid layer for visualization
             map.addSource('grid', {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] }
@@ -660,6 +747,13 @@
                 }
             });
             
+            // Survey data layer (points for spatial analysis)
+            map.addSource('survey-data', {
+                type: 'geojson',
+                data: surveyDataGeoJSON
+            });
+            
+            // Isochrone layer
             map.addSource('iso', {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] }
@@ -685,7 +779,7 @@
                 }
             });
             
-            // Load data from sheets after map is ready
+            // Load data after map is ready
             loadDataFromSheets();
             updateGridLayer();
         });
@@ -693,7 +787,6 @@
         map.on('moveend', updateGridLayer);
         map.on('zoomend', updateGridLayer);
         
-        // Initial setup - but don't load data yet, wait for map to be ready
         updateDataStatus();
     </script>
 </body>
