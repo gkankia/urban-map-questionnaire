@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>გამოგლეჯაMAP - Three Word Grid</title>
+    <title>Urbanyx</title>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
@@ -13,46 +13,60 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'JetBrains Mono', monospace; color: #404040; }
-        .map-container { display: flex; height: 100vh; }
-        #map { flex: 1; }
-        .sidebar { width: 420px; overflow-y: auto; background: #fff; border-left: 1px solid #ddd; padding: 20px; }
+        .map-container { display: flex; height: 100vh; flex-direction: row; }
+        #map { flex: 1; order: 1}
+        .sidebar { order:0; width: 420px; overflow-y: auto; background: #f4f4f4; border-left: 1px solid #ddd; padding: 20px; }
         h1 { font-size: 20px; margin-bottom: 15px; color: #6c86cf; }
-        .section { margin-bottom: 18px; padding: 14px; background: #f9f9f9; border-radius: 5px; }
+        .section { margin-bottom: 18px; padding: 14px; background: #f4f4f4; border-radius: 5px; }
         .section h3 { font-size: 14px; margin-bottom: 10px; color: #333; }
         label { display: block; margin: 10px 0 5px; font-size: 13px; font-weight: bold; }
         select, input { width: 100%; padding: 8px; font-size: 13px; border: 1px solid #ddd; border-radius: 3px; font-family: inherit; }
-        .toggle-group { display: flex; gap: 10px; margin: 10px 0; }
-        .toggle { flex: 1; padding: 10px; text-align: center; border: 2px solid #6c86cf; border-radius: 5px; cursor: pointer; transition: all 0.2s; font-size: 13px; }
-        .toggle:hover, .toggle.active { background: #6c86cf; color: white; }
-        button { width: 100%; padding: 10px; background: #6c86cf; color: white; border: none; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 8px; }
-        button:hover { background: #5a74b8; }
+        .toggle-group { display: flex; gap: 10px; justify-content: center; margin: 10px; }
+        .toggle { flex: 1; padding: 10px; text-align: center; border-radius: 5px; cursor: pointer; transition: all 0.2s; font-size: 13px; }
+        .toggle:hover { background: #f4f4f4; color: #810f7c; box-shadow: 4px 4px 0 #810f7c; transform: translate(-4px, -4px);}
+        .toggle.active { background: rgb(21, 22, 27); color: #f4f4f4; box-shadow: 4px 4px 0 #810f7c; transform: translate(-4px, -4px);}
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
         .modal-content { background: white; margin: 3% auto; padding: 25px; border-radius: 10px; max-width: 600px; max-height: 85vh; overflow-y: auto; }
         .close { float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; }
         .close:hover { color: #000; }
-        .question { margin: 15px 0; padding: 12px; background: #f9f9f9; border-left: 3px solid #6c86cf; }
+        .question { margin: 15px 0; padding: 12px; background: #f4f4f4; border-left: 3px solid #6c86cf; }
         .question label { margin: 0 0 8px 0; }
         .radio-group label { display: flex; align-items: center; margin: 5px 0; font-weight: normal; }
         .radio-group input { width: auto; margin-right: 8px; }
-        .results { background: #e3f0fc; padding: 15px; border-radius: 5px; margin-top: 15px; }
-        .info-box { padding: 10px; background: #e3f0fc; border-radius: 3px; margin-bottom: 15px; font-size: 12px; line-height: 1.5; }
+        .results { background: #f4f4f4; padding: 15px; border-radius: 5px; margin-top: 15px; }
+        .info-box { padding: 10px; background: #f4f4f4; border-radius: 3px; margin-bottom: 15px; font-size: 12px; line-height: 1.5; }
         .three-word-name { font-size: 16px; font-weight: bold; color: #6c86cf; margin: 5px 0; }
-        .tab-buttons { display: flex; gap: 10px; margin-bottom: 15px; }
-        .tab-btn { flex: 1; padding: 12px; background: #e0e0e0; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 13px; }
-        .tab-btn.active { background: #6c86cf; color: white; }
+        .tab-buttons { display: flex; gap: 10px; justify-content: center; margin: 10px; }
+        .tab-btn { flex: 1; border: 1px black; border-radius: 5px; padding: 12px; background: #f4f4f4; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        .tab-btn:hover {
+            background: #f4f4f4;
+            box-shadow: 4px 4px 0 #810f7c; /* Add box shadow on hover */
+            transform: translate(-4px, -4px); /* Adjust hover effect */
+        }
+        .tab-btn.active {
+            color: white;
+            background: rgb(21, 22, 27);
+            box-shadow: 4px 4px 0 #810f7c; /* Add box shadow on hover */
+            transform: translate(-4px, -4px); /* Adjust hover effect */
+        }
+        button.send { width: 100%; padding: 10px; background: #810f7c; color: #f4f4f4; border: none; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+        button.send:hover { width: 100%; padding: 10px; background: #f4f4f4; color: #810f7c; border: none; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 8px; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .aggregate-stat { padding: 8px; margin: 5px 0; background: #f5f5f5; border-radius: 3px; }
+        .aggregate-stat { padding: 8px; margin: 5px 0; background: #f4f4f4; border-radius: 3px; }
         .chart-bar { height: 20px; background: #6c86cf; border-radius: 2px; margin: 3px 0; position: relative; }
-        .chart-label { position: absolute; left: 5px; color: white; font-size: 11px; line-height: 20px; font-weight: bold; }
+        .chart-label { position: absolute; left: 5px; color: #f4f4f4; font-size: 11px; line-height: 20px; font-weight: bold; }
         .status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
         .status-connected { background: #28a745; }
         .status-disconnected { background: #dc3545; }
+        .zaxis { display: block; position: fixed; bottom: 5px; right: 10px; z-index: 10; }
+        
         @media (max-width: 768px) {
             .map-container { flex-direction: column; }
             .sidebar { width: 100%; border-left: none; border-top: 1px solid #ddd; height: 50vh; }
             #map { height: 50vh; }
         }
+        
     </style>
 </head>
 <body>
@@ -121,7 +135,7 @@
                     </select>
                 </div>
                 
-                <button type="submit">გაგზავნა</button>
+                <button class="send" type="submit">გაგზავნა</button>
             </form>
         </div>
     </div>
@@ -181,8 +195,8 @@
                     
                     <label style="margin-top: 12px;">გადაადგილების ფორმა</label>
                     <div class="toggle-group">
-                        <div class="toggle active" data-mode="walking" onclick="setResultsMode('walking')">🚶 ფეხით</div>
-                        <div class="toggle" data-mode="cycling" onclick="setResultsMode('cycling')">🚴 ველო</div>
+                        <div class="toggle active" data-mode="walking" onclick="setResultsMode('walking')">ფეხით<br><span class="material-symbols-outlined">footprint</span></div>
+                        <div class="toggle" data-mode="cycling" onclick="setResultsMode('cycling')">ველო<br><span class="material-symbols-outlined">directions_bike</span></div>
                     </div>
                 </div>
                 
@@ -194,600 +208,12 @@
         </div>
     </div>
 
-    <script>
-        // CONFIGURATION
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLnCoptNE5JCVOwthMVmj42_QpAtnDGyjzhTZIFsh9iBKADW6qWelWY/exec';
-        
-        // Georgian word list
-        const GEORGIAN_WORDS = [
-            'მზე', 'მთა', 'წყალი', 'ხე', 'ყვავილი', 'ქარი', 'ღრუბელი', 'მდინარე', 'ტბა', 'ველი',
-            'ტყე', 'ქვა', 'ცა', 'მიწა', 'ვარსკვლავი', 'მთვარე', 'ნისლი', 'თოვლი', 'წვიმა', 'რადიო',
-            'წიგნი', 'სახლი', 'გზა', 'ხიდი', 'კარი', 'ფანჯარა', 'ბაღი', 'ეზო', 'ქუჩა', 'მოედანი',
-            'ციხე', 'ეკლესია', 'მუზეუმი', 'პარკი', 'ბულვარი', 'სკვერი', 'ფონტანი', 'ძეგლი', 'თეატრი', 'კინო',
-            'ყურძენი', 'ვაშლი', 'მსხალი', 'ატამი', 'ფორთოხალი', 'ლიმონი', 'ჟოლო', 'კივი', 'ბანანი', 'საზამთრო'
-        ];
-        
-        mapboxgl.accessToken = "pk.eyJ1Ijoiam9yam9uZTkwIiwiYSI6ImNrZ3R6M2FvdTBwbmwycXBibGRqM2w2enYifQ.BxjvFSGqefuC9yFCrXC-nQ";
-        
-        const map = new mapboxgl.Map({
-            container: 'map',
-            style: 'mapbox://styles/mapbox/light-v11',
-            center: [44.812, 41.741787],
-            zoom: 13
-        });
-        
-        map.addControl(new mapboxgl.NavigationControl());
-        
-        let marker = null;
-        let surveyDataGeoJSON = { type: 'FeatureCollection', features: [] }; // GeoJSON format
-        let currentFeature = null;
-        let currentTab = 'survey';
-        let resultsMode = 'walking';
-        const GRID_SIZE = 0.0018; // ~200 meters
-        
-        // Generate three-word name
-        function generateThreeWordName(cellId) {
-            const [x, y] = cellId.split(',').map(Number);
-            const hash = Math.abs((x * 73856093) ^ (y * 19349663));
-            
-            const word1 = GEORGIAN_WORDS[hash % GEORGIAN_WORDS.length];
-            const word2 = GEORGIAN_WORDS[Math.floor(hash / GEORGIAN_WORDS.length) % GEORGIAN_WORDS.length];
-            const word3 = GEORGIAN_WORDS[Math.floor(hash / (GEORGIAN_WORDS.length * GEORGIAN_WORDS.length)) % GEORGIAN_WORDS.length];
-            
-            return `${word1}.${word2}.${word3}`;
-        }
-        
-        // Generate cell ID from coordinates
-        function getCellId(lng, lat) {
-            const x = Math.floor(lng / GRID_SIZE);
-            const y = Math.floor(lat / GRID_SIZE);
-            return `${x},${y}`;
-        }
-        
-        // Get cell bounds
-        function getCellBounds(cellId) {
-            const [x, y] = cellId.split(',').map(Number);
-            const minLng = x * GRID_SIZE;
-            const minLat = y * GRID_SIZE;
-            return [
-                [minLng, minLat],
-                [minLng + GRID_SIZE, minLat],
-                [minLng + GRID_SIZE, minLat + GRID_SIZE],
-                [minLng, minLat + GRID_SIZE],
-                [minLng, minLat]
-            ];
-        }
-        
-        // Get cell center
-        function getCellCenter(cellId) {
-            const bounds = getCellBounds(cellId);
-            return [(bounds[0][0] + bounds[2][0]) / 2, (bounds[0][1] + bounds[2][1]) / 2];
-        }
-        
-        // Update data status
-        function updateDataStatus() {
-            const total = surveyDataGeoJSON.features.reduce((sum, f) => sum + f.properties.responses.length, 0);
-            const cells = surveyDataGeoJSON.features.length;
-            document.getElementById('totalResponses').textContent = total;
-            document.getElementById('totalCells').textContent = cells;
-        }
-        
-        // Load data from Google Sheets and convert to GeoJSON
-        async function loadDataFromSheets() {
-            try {
-                const response = await fetch(APPS_SCRIPT_URL);
-                const data = await response.json();
-                
-                if (data.status === 'success' && data.rows) {
-                    const gridMap = {}; // Temporary map to group by gridName
-                    
-                    data.rows.forEach(row => {
-                        const gridName = row[1];
-                        const cellId = row[2];
-                        const lat = parseFloat(row[3]);
-                        const lng = parseFloat(row[4]);
-                        
-                        if (!gridMap[gridName]) {
-                            const center = [lng, lat];
-                            gridMap[gridName] = {
-                                type: 'Feature',
-                                geometry: {
-                                    type: 'Point',
-                                    coordinates: center
-                                },
-                                properties: {
-                                    gridName: gridName,
-                                    cellId: cellId,
-                                    responses: []
-                                }
-                            };
-                        }
-                        
-                        gridMap[gridName].properties.responses.push({
-                            timestamp: row[0],
-                            age: row[5],
-                            gender: row[6],
-                            vote: row[7],
-                            economy: row[8],
-                            priority: row[9]
-                        });
-                    });
-                    
-                    surveyDataGeoJSON.features = Object.values(gridMap);
-                    
-                    if (map.isStyleLoaded() && map.getSource('survey-data')) {
-                        map.getSource('survey-data').setData(surveyDataGeoJSON);
-                    }
-                    
-                    updateGridLayer();
-                    updateDataStatus();
-                    console.log(`Loaded ${data.rows.length} responses as ${surveyDataGeoJSON.features.length} grid features`);
-                    console.log('Sample feature:', surveyDataGeoJSON.features[0]);
-                }
-            } catch (err) {
-                console.error('Failed to load data:', err);
-            }
-        }
-        
-        // Tab switching
-        function switchTab(tab) {
-            currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            if (tab === 'survey') {
-                document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
-                document.getElementById('surveyTab').classList.add('active');
-                if (marker) marker.remove();
-                marker = null;
-                if (map.getSource('iso')) {
-                    map.getSource('iso').setData({ type: 'FeatureCollection', features: [] });
-                }
-            } else {
-                document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
-                document.getElementById('resultsTab').classList.add('active');
-            }
-        }
-        
-        function setResultsMode(mode) {
-            resultsMode = mode;
-            document.querySelectorAll('#resultsTab .toggle').forEach(t => t.classList.remove('active'));
-            document.querySelector(`#resultsTab .toggle[data-mode="${mode}"]`).classList.add('active');
-            if (marker && currentTab === 'results') generateResultsIsochrone(marker.getLngLat());
-        }
-        
-        // Aggregate results within isochrone
-        function aggregateResultsInIsochrone(isochronePolygon) {
-            const aggregated = {
-                total: 0,
-                age: {},
-                gender: {},
-                vote: {},
-                economy: {},
-                priority: {},
-                grids: []
-            };
-            
-            console.log('Starting aggregation. Total features:', surveyDataGeoJSON.features.length);
-            
-            surveyDataGeoJSON.features.forEach(feature => {
-                const point = turf.point(feature.geometry.coordinates);
-                
-                try {
-                    if (turf.booleanPointInPolygon(point, isochronePolygon)) {
-                        const props = feature.properties;
-                        console.log('Feature inside isochrone:', props.gridName, 'at', feature.geometry.coordinates, 'responses:', props.responses.length);
-                        
-                        aggregated.grids.push({
-                            name: props.gridName,
-                            count: props.responses.length
-                        });
-                        
-                        props.responses.forEach(response => {
-                            aggregated.total++;
-                            if (response.age) aggregated.age[response.age] = (aggregated.age[response.age] || 0) + 1;
-                            if (response.gender) aggregated.gender[response.gender] = (aggregated.gender[response.gender] || 0) + 1;
-                            if (response.vote) aggregated.vote[response.vote] = (aggregated.vote[response.vote] || 0) + 1;
-                            if (response.economy) aggregated.economy[response.economy] = (aggregated.economy[response.economy] || 0) + 1;
-                            if (response.priority) aggregated.priority[response.priority] = (aggregated.priority[response.priority] || 0) + 1;
-                        });
-                    }
-                } catch (err) {
-                    console.error('Error checking feature:', feature.properties.gridName, err);
-                }
-            });
-            
-            console.log('Aggregation complete. Total responses:', aggregated.total, 'Grids:', aggregated.grids.length);
-            return aggregated;
-        }
-        
-        // Display aggregated results
-        function displayAggregatedResults(data) {
-            if (data.total === 0) {
-                document.getElementById('aggregateContent').innerHTML = 
-                    '<p style="text-align: center; color: #999; padding: 20px;">ამ არეალში მონაცემები არ არის</p>';
-                return;
-            }
-            
-            const voteLabels = {
-                qocebi: 'ქართული ოცნება',
-                lelo: 'ლელო',
-                gakharia: 'გახარია',
-                boycott: 'ბოიკოტი',
-                undecided: 'გადაუწყვეტელი'
-            };
-            
-            const priorityLabels = {
-                economy: 'ეკონომიკა',
-                democracy: 'დემოკრატია',
-                eu: 'ევროინტეგრაცია',
-                security: 'უსაფრთხოება',
-                education: 'განათლება'
-            };
-            
-            const economyLabels = {
-                very_good: 'ძალიან კარგი',
-                good: 'კარგი',
-                neutral: 'საშუალო',
-                bad: 'ცუდი',
-                very_bad: 'ძალიან ცუდი'
-            };
-            
-            let html = `<div class="aggregate-stat"><strong>სულ პასუხი:</strong> ${data.total}</div>`;
-            html += `<div class="aggregate-stat"><strong>გადამკვეთი უჯრედები:</strong> ${data.grids.length}</div>`;
-            
-            if (data.grids.length > 0) {
-                html += '<div class="aggregate-stat" style="max-height: 100px; overflow-y: auto;"><strong>უჯრედები:</strong><br>';
-                data.grids.forEach(grid => {
-                    html += `<span style="font-size: 11px; color: #6c86cf;">${grid.name}</span> (${grid.count}) <br>`;
-                });
-                html += '</div>';
-            }
-            
-            if (Object.keys(data.vote).length > 0) {
-                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პარტიული გადანაწილება:</h4>';
-                const sortedVotes = Object.entries(data.vote).sort((a, b) => b[1] - a[1]);
-                sortedVotes.forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<div class="aggregate-stat">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                            <span>${voteLabels[key] || key}</span>
-                            <span><strong>${count}</strong> (${pct}%)</span>
-                        </div>
-                        <div class="chart-bar" style="width: ${pct}%;">
-                            <span class="chart-label">${pct}%</span>
-                        </div>
-                    </div>`;
-                });
-            }
-            
-            if (Object.keys(data.priority).length > 0) {
-                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პრიორიტეტები:</h4>';
-                const sortedPriority = Object.entries(data.priority).sort((a, b) => b[1] - a[1]);
-                sortedPriority.forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<div class="aggregate-stat">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                            <span>${priorityLabels[key] || key}</span>
-                            <span><strong>${count}</strong> (${pct}%)</span>
-                        </div>
-                        <div class="chart-bar" style="width: ${pct}%;">
-                            <span class="chart-label">${pct}%</span>
-                        </div>
-                    </div>`;
-                });
-            }
-            
-            if (Object.keys(data.economy).length > 0) {
-                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">ეკონომიკის შეფასება:</h4>';
-                const sortedEconomy = Object.entries(data.economy).sort((a, b) => b[1] - a[1]);
-                sortedEconomy.forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<div class="aggregate-stat">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                            <span>${economyLabels[key] || key}</span>
-                            <span><strong>${count}</strong> (${pct}%)</span>
-                        </div>
-                        <div class="chart-bar" style="width: ${pct}%;">
-                            <span class="chart-label">${pct}%</span>
-                        </div>
-                    </div>`;
-                });
-            }
-            
-            html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">დემოგრაფია:</h4>';
-            if (Object.keys(data.age).length > 0) {
-                html += '<div class="aggregate-stat"><strong>ასაკი:</strong><br>';
-                Object.entries(data.age).sort().forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<span style="font-size: 11px;">${key}: ${count} (${pct}%)</span> | `;
-                });
-                html += '</div>';
-            }
-            
-            if (Object.keys(data.gender).length > 0) {
-                html += '<div class="aggregate-stat"><strong>სქესი:</strong><br>';
-                const genderLabels = { male: 'მამრობითი', female: 'მდედრობითი', other: 'სხვა' };
-                Object.entries(data.gender).forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<span style="font-size: 11px;">${genderLabels[key] || key}: ${count} (${pct}%)</span> | `;
-                });
-                html += '</div>';
-            }
-            
-            document.getElementById('aggregateContent').innerHTML = html;
-        }
-        
-        // Modal setup
-        const modal = document.getElementById('modal');
-        document.querySelector('.close').onclick = () => modal.style.display = 'none';
-        window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
-        
-        // Form submission
-        document.getElementById('surveyForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const cellId = currentFeature.properties.cellId;
-            const center = getCellCenter(cellId);
-            const gridName = currentFeature.properties.gridName;
-            
-            const response = {
-                timestamp: new Date().toISOString(),
-                gridName: gridName,
-                cellId: cellId,
-                lat: center[1],
-                lng: center[0],
-                age: formData.get('age'),
-                gender: formData.get('gender'),
-                vote: formData.get('vote'),
-                economy: formData.get('economy'),
-                priority: formData.get('priority')
-            };
-            
-            // Find existing feature or create new one
-            let feature = surveyDataGeoJSON.features.find(f => f.properties.gridName === gridName);
-            if (!feature) {
-                feature = {
-                    type: 'Feature',
-                    geometry: {
-                        type: 'Point',
-                        coordinates: center
-                    },
-                    properties: {
-                        gridName: gridName,
-                        cellId: cellId,
-                        responses: []
-                    }
-                };
-                surveyDataGeoJSON.features.push(feature);
-            }
-            
-            feature.properties.responses.push({
-                timestamp: response.timestamp,
-                age: response.age,
-                gender: response.gender,
-                vote: response.vote,
-                economy: response.economy,
-                priority: response.priority
-            });
-            
-            // Update map source
-            if (map.getSource('survey-data')) {
-                map.getSource('survey-data').setData(surveyDataGeoJSON);
-            }
-            
-            // Send to Google Sheets
-            try {
-                await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(response)
-                });
-                console.log('Data sent to Google Sheets successfully');
-            } catch (err) {
-                console.error('Failed to send to Google Sheets:', err);
-            }
-            
-            alert('მადლობა! თქვენი პასუხი შენახულია.');
-            modal.style.display = 'none';
-            e.target.reset();
-            updateGridLayer();
-            updateDataStatus();
-        };
-        
-        // Update grid visualization
-        function updateGridLayer() {
-            const bounds = map.getBounds();
-            const minLng = bounds.getWest();
-            const maxLng = bounds.getEast();
-            const minLat = bounds.getSouth();
-            const maxLat = bounds.getNorth();
-            
-            const features = [];
-            const existingGrids = {};
-            
-            // Map existing survey data
-            surveyDataGeoJSON.features.forEach(f => {
-                existingGrids[f.properties.cellId] = {
-                    gridName: f.properties.gridName,
-                    count: f.properties.responses.length
-                };
-            });
-            
-            for (let lng = Math.floor(minLng / GRID_SIZE) * GRID_SIZE; lng <= maxLng; lng += GRID_SIZE) {
-                for (let lat = Math.floor(minLat / GRID_SIZE) * GRID_SIZE; lat <= maxLat; lat += GRID_SIZE) {
-                    const cellId = getCellId(lng, lat);
-                    const coords = getCellBounds(cellId);
-                    const existing = existingGrids[cellId];
-                    const count = existing ? existing.count : 0;
-                    const gridName = existing ? existing.gridName : generateThreeWordName(cellId);
-                    
-                    if (count > 0 || map.getZoom() > 12) {
-                        features.push({
-                            type: 'Feature',
-                            properties: { 
-                                cellId, 
-                                gridName,
-                                count, 
-                                hasData: count > 0
-                            },
-                            geometry: { type: 'Polygon', coordinates: [coords] }
-                        });
-                    }
-                }
-            }
-            
-            if (map.getSource('grid')) {
-                map.getSource('grid').setData({ type: 'FeatureCollection', features });
-            }
-        }
-        
-        // Map click handler
-        map.on('click', (e) => {
-            if (currentTab === 'survey') {
-                const features = map.queryRenderedFeatures(e.point, { layers: ['grid-layer'] });
-                
-                if (features.length > 0) {
-                    const props = features[0].properties;
-                    currentFeature = {
-                        properties: {
-                            cellId: props.cellId,
-                            gridName: props.gridName,
-                            count: props.count
-                        }
-                    };
-                    
-                    const center = getCellCenter(props.cellId);
-                    
-                    document.getElementById('cellInfo').innerHTML = 
-                        `<div class="three-word-name">${props.gridName}</div>` +
-                        `<strong>Grid ID:</strong> ${props.cellId}<br>` +
-                        `<strong>ცენტრი:</strong> ${center[1].toFixed(6)}, ${center[0].toFixed(6)}<br>` +
-                        `<strong>ზომა:</strong> ~200m x 200m<br>` +
-                        `<strong>არსებული პასუხები:</strong> ${props.count}`;
-                    modal.style.display = 'block';
-                }
-            } else {
-                if (marker) marker.remove();
-                marker = new mapboxgl.Marker({ color: '#6c86cf' }).setLngLat(e.lngLat).addTo(map);
-                generateResultsIsochrone(e.lngLat);
-            }
-        });
-        
-        // Generate isochrone
-        function generateResultsIsochrone(lngLat) {
-            const time = document.getElementById('timeResults').value;
-            const url = `https://api.mapbox.com/isochrone/v1/mapbox/${resultsMode}/${lngLat.lng},${lngLat.lat}?contours_minutes=${time}&polygons=true&access_token=${mapboxgl.accessToken}`;
-            
-            console.log('Generating isochrone. Survey features available:', surveyDataGeoJSON.features.length);
-            
-            fetch(url)
-                .then(r => r.json())
-                .then(data => {
-                    console.log('Isochrone received');
-                    
-                    if (map.getSource('iso')) {
-                        map.getSource('iso').setData(data);
-                    }
-                    
-                    if (data.features && data.features.length > 0) {
-                        const aggregated = aggregateResultsInIsochrone(data.features[0]);
-                        displayAggregatedResults(aggregated);
-                        document.getElementById('aggregateResults').style.display = 'block';
-                    } else {
-                        console.warn('No isochrone features returned');
-                        document.getElementById('aggregateResults').style.display = 'none';
-                    }
-                })
-                .catch(err => {
-                    console.error('Isochrone error:', err);
-                    alert('შეცდომა იზოქრონის შექმნისას: ' + err.message);
-                });
-        }
-        
-        // Time change
-        document.getElementById('timeResults').onchange = () => {
-            if (marker && currentTab === 'results') generateResultsIsochrone(marker.getLngLat());
-        };
-        
-        // Initialize map layers
-        map.on('load', () => {
-            // Grid layer for visualization
-            map.addSource('grid', {
-                type: 'geojson',
-                data: { type: 'FeatureCollection', features: [] }
-            });
-            
-            map.addLayer({
-                id: 'grid-layer',
-                type: 'fill',
-                source: 'grid',
-                paint: {
-                    'fill-color': [
-                        'case',
-                        ['>', ['get', 'count'], 0],
-                        ['interpolate', ['linear'], ['get', 'count'],
-                            1, '#e3f0fc',
-                            5, '#6c86cf',
-                            10, '#4a6bb0'
-                        ],
-                        '#ffffff'
-                    ],
-                    'fill-opacity': 0.3
-                }
-            });
-            
-            map.addLayer({
-                id: 'grid-outline',
-                type: 'line',
-                source: 'grid',
-                paint: {
-                    'line-color': '#6c86cf',
-                    'line-width': 1,
-                    'line-opacity': 0.5
-                }
-            });
-            
-            // Survey data layer (points for spatial analysis)
-            map.addSource('survey-data', {
-                type: 'geojson',
-                data: surveyDataGeoJSON
-            });
-            
-            // Isochrone layer
-            map.addSource('iso', {
-                type: 'geojson',
-                data: { type: 'FeatureCollection', features: [] }
-            });
-            
-            map.addLayer({
-                id: 'iso-layer',
-                type: 'fill',
-                source: 'iso',
-                paint: {
-                    'fill-color': '#6c86cf',
-                    'fill-opacity': 0.2
-                }
-            });
-            
-            map.addLayer({
-                id: 'iso-outline',
-                type: 'line',
-                source: 'iso',
-                paint: {
-                    'line-color': '#6c86cf',
-                    'line-width': 2
-                }
-            });
-            
-            // Load data after map is ready
-            loadDataFromSheets();
-            updateGridLayer();
-        });
-        
-        map.on('moveend', updateGridLayer);
-        map.on('zoomend', updateGridLayer);
-        
-        updateDataStatus();
-    </script>
+    <footer>
+        <div class="zaxis">
+            <a href="https://zaxis.ge"><img src="https://raw.githubusercontent.com/axis-Z/urbanyxv1/refs/heads/main/img/white-transparent-background.png" alt="" width="75"></a>
+        </div>
+    </footer>
+
+    <script src="./main.js"></script>
 </body>
 </html>
