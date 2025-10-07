@@ -16,7 +16,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
             container: 'map',
             style: 'mapbox://styles/jorjone90/cmd1cg82i000101s61qwaca16',
             center: [44.812, 41.741787],
-            zoom: 10.5,
+            zoom: 12,
             attributionControl: false,
             preserveDrawingBuffer: true
         });
@@ -46,8 +46,15 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
         let currentTab = 'survey';
         let resultsMode = 'walking';
         // --- GRID SIZE CONFIG ---
-        // Target cell size in meters (≈200 m squares)
-        const GRID_SIZE_METERS = 200;
+
+        // Fixed grid origin (southwest corner of your area)
+        const ORIGIN_LNG = 41.0;   // West boundary (adjust as needed)
+        const ORIGIN_LAT = 41.0;   // South boundary
+        const GRID_EXTENT_LNG = 47.0; // East boundary
+        const GRID_EXTENT_LAT = 44.0; // North boundary
+
+        // Target cell size in meters (≈500 m squares)
+        const GRID_SIZE_METERS = 500;
 
         // Convert meters → degrees (depends on latitude)
         function metersToDegrees(lat, meters) {
@@ -56,34 +63,34 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
             return { latDeg, lonDeg };
         }
 
-        // These get updated dynamically depending on map center
-        let GRID_SIZE_LAT = 0.0018; // default fallback
-        let GRID_SIZE_LNG = 0.0018;
+        // Calculate once based on middle latitude
+        const avgLat = (ORIGIN_LAT + GRID_EXTENT_LAT) / 2;
+        const { latDeg, lonDeg } = metersToDegrees(avgLat, GRID_SIZE_METERS);
+        const GRID_SIZE_LAT = latDeg;
+        const GRID_SIZE_LNG = lonDeg;
 
         // Generate three-word name
         function generateThreeWordName(cellId) {
             const [x, y] = cellId.split(',').map(Number);
             const hash = Math.abs((x * 73856093) ^ (y * 19349663));
-            
             const word1 = GEORGIAN_WORDS[hash % GEORGIAN_WORDS.length];
             const word2 = GEORGIAN_WORDS[Math.floor(hash / GEORGIAN_WORDS.length) % GEORGIAN_WORDS.length];
             const word3 = GEORGIAN_WORDS[Math.floor(hash / (GEORGIAN_WORDS.length * GEORGIAN_WORDS.length)) % GEORGIAN_WORDS.length];
-            
             return `${word1}.${word2}.${word3}`;
         }
 
-        // Generate cell ID from coordinates
+        // Convert coordinates → cell ID
         function getCellId(lng, lat) {
-            const x = Math.floor(lng / GRID_SIZE_LNG);
-            const y = Math.floor(lat / GRID_SIZE_LAT);
+            const x = Math.floor((lng - ORIGIN_LNG) / GRID_SIZE_LNG);
+            const y = Math.floor((lat - ORIGIN_LAT) / GRID_SIZE_LAT);
             return `${x},${y}`;
         }
 
-        // Get cell bounds
+        // Get polygon bounds for cell
         function getCellBounds(cellId) {
             const [x, y] = cellId.split(',').map(Number);
-            const minLng = x * GRID_SIZE_LNG;
-            const minLat = y * GRID_SIZE_LAT;
+            const minLng = ORIGIN_LNG + x * GRID_SIZE_LNG;
+            const minLat = ORIGIN_LAT + y * GRID_SIZE_LAT;
             return [
                 [minLng, minLat],
                 [minLng + GRID_SIZE_LNG, minLat],
@@ -98,6 +105,26 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
             const bounds = getCellBounds(cellId);
             return [(bounds[0][0] + bounds[2][0]) / 2, (bounds[0][1] + bounds[2][1]) / 2];
         }
+
+        // Build a fixed GeoJSON grid
+        function buildFixedGrid() {
+            const features = [];
+            for (let lng = ORIGIN_LNG; lng < GRID_EXTENT_LNG; lng += GRID_SIZE_LNG) {
+                for (let lat = ORIGIN_LAT; lat < GRID_EXTENT_LAT; lat += GRID_SIZE_LAT) {
+                    const cellId = getCellId(lng, lat);
+                    const bounds = getCellBounds(cellId);
+                    features.push({
+                        type: 'Feature',
+                        geometry: { type: 'Polygon', coordinates: [bounds] },
+                        properties: { cellId, count: 0 }
+                    });
+                }
+            }
+            return { type: 'FeatureCollection', features };
+        }
+
+        // --- INITIALIZATION ---
+        let fixedGrid = buildFixedGrid();
         
         // Update data status
         function updateDataStatus() {
@@ -423,14 +450,21 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
         // Update grid visualization
         function updateGridLayer() {
             const bounds = map.getBounds();
+            const center = map.getCenter();
+        
+            // Dynamically recalc grid size for latitude (to stay square-ish)
+            const { latDeg, lonDeg } = metersToDegrees(center.lat, GRID_SIZE_METERS);
+            GRID_SIZE_LAT = latDeg;
+            GRID_SIZE_LNG = lonDeg;
+        
             const minLng = bounds.getWest();
             const maxLng = bounds.getEast();
             const minLat = bounds.getSouth();
             const maxLat = bounds.getNorth();
-            
+        
             const features = [];
             const existingGrids = {};
-            
+        
             // Map existing survey data
             surveyDataGeoJSON.features.forEach(f => {
                 existingGrids[f.properties.cellId] = {
@@ -438,7 +472,8 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                     count: f.properties.responses.length
                 };
             });
-            
+        
+            // Generate only visible grids (aligned to world grid)
             for (let lng = Math.floor(minLng / GRID_SIZE_LNG) * GRID_SIZE_LNG; lng <= maxLng; lng += GRID_SIZE_LNG) {
                 for (let lat = Math.floor(minLat / GRID_SIZE_LAT) * GRID_SIZE_LAT; lat <= maxLat; lat += GRID_SIZE_LAT) {
                     const cellId = getCellId(lng, lat);
@@ -446,7 +481,8 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                     const existing = existingGrids[cellId];
                     const count = existing ? existing.count : 0;
                     const gridName = existing ? existing.gridName : generateThreeWordName(cellId);
-                    
+        
+                    // Only show grids when zoomed in enough or if data exists
                     if (count > 0 || map.getZoom() > 12) {
                         features.push({
                             type: 'Feature',
@@ -461,7 +497,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                     }
                 }
             }
-            
+        
             if (map.getSource('grid')) {
                 map.getSource('grid').setData({ type: 'FeatureCollection', features });
             }
@@ -474,10 +510,14 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                 
                 if (features.length > 0) {
                     const props = features[0].properties;
+
+                    // Ensure gridName exists
+                    const gridName = props.gridName || generateThreeWordName(props.cellId);
+
                     currentFeature = {
                         properties: {
                             cellId: props.cellId,
-                            gridName: props.gridName,
+                            gridName: gridName,
                             count: props.count
                         }
                     };
@@ -485,7 +525,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                     const center = getCellCenter(props.cellId);
                     
                     document.getElementById('cellInfo').innerHTML = 
-                        `<div class="three-word-name">${props.gridName}</div>` +
+                        `<div class="three-word-name">${gridName}</div>` +
                         `<strong>Grid ID:</strong> ${props.cellId}<br>` +
                         `<strong>ცენტრი:</strong> ${center[1].toFixed(6)}, ${center[0].toFixed(6)}<br>` +
                         `<strong>ზომა:</strong> ~200m x 200m<br>` +
@@ -550,10 +590,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
         // Initialize map layers
         map.on('load', () => {
             // Grid layer for visualization
-            map.addSource('grid', {
-                type: 'geojson',
-                data: { type: 'FeatureCollection', features: [] }
-            });
+            map.addSource('grid', { type: 'geojson', data: fixedGrid });
             
             map.addLayer({
                 id: 'grid-layer',
@@ -571,7 +608,9 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                         '#ffffff'
                     ],
                     'fill-opacity': 0.05
-                }
+                },
+                minzoom: 12,   // 👈 grid appears only when zoom >= 12
+                //maxzoom: 22    // 👈 (optional) disappears if zoom > 22
             });
             
             map.addLayer({
@@ -580,8 +619,16 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
                 source: 'grid',
                 paint: {
                     'line-color': '#6c86cf',
-                    'line-width': 1,
-                    'line-opacity': 0.5
+                    'line-opacity': 0.25,
+                    'line-width': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        10, 0.5,   // at zoom 10 → line width 0.5
+                        12, 0.75,     // at zoom 12 → line width 1
+                        14, 1,     // at zoom 14 → line width 2
+                        16, 3      // at zoom 16 → line width 3
+                    ]
                 }
             });
             
@@ -623,10 +670,6 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
         });
 
         map.on('moveend', () => {
-            const center = map.getCenter();
-            const { latDeg, lonDeg } = metersToDegrees(center.lat, GRID_SIZE_METERS);
-            GRID_SIZE_LAT = latDeg;
-            GRID_SIZE_LNG = lonDeg;
             updateGridLayer(); // refresh visible grid
         });
         
