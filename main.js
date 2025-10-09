@@ -126,10 +126,13 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
         // --- INITIALIZATION ---
         let fixedGrid = buildFixedGrid();
         
-        // Update data status
         function updateDataStatus() {
-            const total = surveyDataGeoJSON.features.reduce((sum, f) => sum + f.properties.responses.length, 0);
+            const total = surveyDataGeoJSON.features.reduce((sum, f) => {
+                const responses = f.properties.responses || [];
+                return sum + responses.length;
+            }, 0);
             const cells = surveyDataGeoJSON.features.length;
+            
             document.getElementById('totalResponses').textContent = total;
             document.getElementById('totalCells').textContent = cells;
         }
