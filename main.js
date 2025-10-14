@@ -264,112 +264,353 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRShukywhUdgLn
         }
         
         // Display aggregated results
-        function displayAggregatedResults(data) {
-            if (data.total === 0) {
-                document.getElementById('aggregateContent').innerHTML = 
-                    '<p style="text-align: center; color: #999; padding: 20px;">ამ არეალში მონაცემები არ არის</p>';
-                return;
+
+        // Store chart instances to destroy before recreating
+let chartInstances = {};
+
+// Display aggregated results with Chart.js
+function displayAggregatedResults(data) {
+    if (data.total === 0) {
+        document.getElementById('aggregateContent').innerHTML = 
+            '<p style="text-align: center; color: #999; padding: 20px;">ამ არეალში მონაცემები არ არის</p>';
+        return;
+    }
+    
+    const voteLabels = {
+        qocebi: 'ქართული ოცნება',
+        lelo: 'ლელო',
+        gakharia: 'გახარია',
+        boycott: 'ბოიკოტი',
+        undecided: 'გადაუწყვეტელი'
+    };
+    
+    const priorityLabels = {
+        economy: 'ეკონომიკა',
+        democracy: 'დემოკრატია',
+        eu: 'ევროინტეგრაცია',
+        security: 'უსაფრთხოება',
+        education: 'განათლება'
+    };
+    
+    const economyLabels = {
+        very_good: 'ძალიან კარგი',
+        good: 'კარგი',
+        neutral: 'საშუალო',
+        bad: 'ცუდი',
+        very_bad: 'ძალიან ცუდი'
+    };
+    
+    const genderLabels = { 
+        male: 'მამრობითი', 
+        female: 'მდედრობითი', 
+        other: 'სხვა' 
+    };
+    
+    // Destroy existing charts
+    Object.values(chartInstances).forEach(chart => chart.destroy());
+    chartInstances = {};
+    
+    let html = `
+        <div class="aggregate-stat"><strong>სულ პასუხი:</strong> ${data.total}</div>
+        <div style="margin-top: 20px;">
+    `;
+    
+    // Gender Chart (Pie Chart)
+    if (Object.keys(data.gender).length > 0) {
+        html += `
+            <h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">სქესი:</h4>
+            <canvas id="genderChart" height="200"></canvas>
+        `;
+    }
+    
+    // Vote Distribution (Horizontal Bar)
+    if (Object.keys(data.vote).length > 0) {
+        html += `
+            <h4 style="margin-top: 25px; margin-bottom: 8px; color: #333;">პარტიული გადანაწილება:</h4>
+            <canvas id="voteChart" height="250"></canvas>
+        `;
+    }
+    
+    // Priorities (Bar Chart)
+    if (Object.keys(data.priority).length > 0) {
+        html += `
+            <h4 style="margin-top: 25px; margin-bottom: 8px; color: #333;">პრიორიტეტები:</h4>
+            <canvas id="priorityChart" height="250"></canvas>
+        `;
+    }
+    
+    // Economy Assessment (Bar Chart)
+    if (Object.keys(data.economy).length > 0) {
+        html += `
+            <h4 style="margin-top: 25px; margin-bottom: 8px; color: #333;">ეკონომიკის შეფასება:</h4>
+            <canvas id="economyChart" height="250"></canvas>
+        `;
+    }
+    
+    // Age Distribution (Bar Chart)
+    if (Object.keys(data.age).length > 0) {
+        html += `
+            <h4 style="margin-top: 25px; margin-bottom: 8px; color: #333;">ასაკის გადანაწილება:</h4>
+            <canvas id="ageChart" height="200"></canvas>
+        `;
+    }
+    
+    html += '</div>';
+    
+    document.getElementById('aggregateContent').innerHTML = html;
+    
+    // Create charts after DOM update
+    setTimeout(() => {
+        createCharts(data, voteLabels, priorityLabels, economyLabels, genderLabels);
+    }, 0);
+}
+
+function createCharts(data, voteLabels, priorityLabels, economyLabels, genderLabels) {
+    const chartConfig = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                    font: { size: 11 },
+                    padding: 10
+                }
             }
-            
-            const voteLabels = {
-                qocebi: 'ქართული ოცნება',
-                lelo: 'ლელო',
-                gakharia: 'გახარია',
-                boycott: 'ბოიკოტი',
-                undecided: 'გადაუწყვეტელი'
-            };
-            
-            const priorityLabels = {
-                economy: 'ეკონომიკა',
-                democracy: 'დემოკრატია',
-                eu: 'ევროინტეგრაცია',
-                security: 'უსაფრთხოება',
-                education: 'განათლება'
-            };
-            
-            const economyLabels = {
-                very_good: 'ძალიან კარგი',
-                good: 'კარგი',
-                neutral: 'საშუალო',
-                bad: 'ცუდი',
-                very_bad: 'ძალიან ცუდი'
-            };
-            
-            let html = `<div class="aggregate-stat"><strong>სულ პასუხი:</strong> ${data.total}</div>`;
-            
-            if (Object.keys(data.vote).length > 0) {
-                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პარტიული გადანაწილება:</h4>';
-                const sortedVotes = Object.entries(data.vote).sort((a, b) => b[1] - a[1]);
-                sortedVotes.forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<div class="aggregate-stat">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                            <span>${voteLabels[key] || key}</span>
-                            <span><strong>${count}</strong> (${pct}%)</span>
-                        </div>
-                        <div class="chart-bar" style="width: ${pct}%;">
-                            <span class="chart-label">${pct}%</span>
-                        </div>
-                    </div>`;
-                });
-            }
-            
-            if (Object.keys(data.priority).length > 0) {
-                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">პრიორიტეტები:</h4>';
-                const sortedPriority = Object.entries(data.priority).sort((a, b) => b[1] - a[1]);
-                sortedPriority.forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<div class="aggregate-stat">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                            <span>${priorityLabels[key] || key}</span>
-                            <span><strong>${count}</strong> (${pct}%)</span>
-                        </div>
-                        <div class="chart-bar" style="width: ${pct}%;">
-                            <span class="chart-label">${pct}%</span>
-                        </div>
-                    </div>`;
-                });
-            }
-            
-            if (Object.keys(data.economy).length > 0) {
-                html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">ეკონომიკის შეფასება:</h4>';
-                const sortedEconomy = Object.entries(data.economy).sort((a, b) => b[1] - a[1]);
-                sortedEconomy.forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<div class="aggregate-stat">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                            <span>${economyLabels[key] || key}</span>
-                            <span><strong>${count}</strong> (${pct}%)</span>
-                        </div>
-                        <div class="chart-bar" style="width: ${pct}%;">
-                            <span class="chart-label">${pct}%</span>
-                        </div>
-                    </div>`;
-                });
-            }
-            
-            html += '<h4 style="margin-top: 15px; margin-bottom: 8px; color: #333;">დემოგრაფია:</h4>';
-            if (Object.keys(data.age).length > 0) {
-                html += '<div class="aggregate-stat"><strong>ასაკი:</strong><br>';
-                Object.entries(data.age).sort().forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<span style="font-size: 11px;">${key}: ${count} (${pct}%)</span> | `;
-                });
-                html += '</div>';
-            }
-            
-            if (Object.keys(data.gender).length > 0) {
-                html += '<div class="aggregate-stat"><strong>სქესი:</strong><br>';
-                const genderLabels = { male: 'მამრობითი', female: 'მდედრობითი', other: 'სხვა' };
-                Object.entries(data.gender).forEach(([key, count]) => {
-                    const pct = ((count / data.total) * 100).toFixed(1);
-                    html += `<span style="font-size: 11px;">${genderLabels[key] || key}: ${count} (${pct}%)</span> | `;
-                });
-                html += '</div>';
-            }
-            
-            document.getElementById('aggregateContent').innerHTML = html;
         }
+    };
+    
+    // Gender Pie Chart
+    if (Object.keys(data.gender).length > 0) {
+        const genderCanvas = document.getElementById('genderChart');
+        if (genderCanvas) {
+            const ctx = genderCanvas.getContext('2d');
+            const genderData = Object.entries(data.gender).map(([key, count]) => ({
+                label: genderLabels[key] || key,
+                value: count,
+                percentage: ((count / data.total) * 100).toFixed(1)
+            }));
+            
+            chartInstances.gender = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: genderData.map(d => `${d.label} (${d.percentage}%)`),
+                    datasets: [{
+                        data: genderData.map(d => d.value),
+                        backgroundColor: ['#6c86cf', '#a8b9e3', '#c5d1f0'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    ...chartConfig,
+                    plugins: {
+                        ...chartConfig.plugins,
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const label = context.label || '';
+                                    const value = context.parsed;
+                                    return `${label}: ${value} პასუხი`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    // Vote Horizontal Bar Chart
+    if (Object.keys(data.vote).length > 0) {
+        const voteCanvas = document.getElementById('voteChart');
+        if (voteCanvas) {
+            const ctx = voteCanvas.getContext('2d');
+            const sortedVotes = Object.entries(data.vote).sort((a, b) => b[1] - a[1]);
+            
+            chartInstances.vote = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedVotes.map(([key]) => voteLabels[key] || key),
+                    datasets: [{
+                        label: 'ხმები',
+                        data: sortedVotes.map(([, count]) => count),
+                        backgroundColor: '#6c86cf',
+                        borderColor: '#4a6bb0',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    ...chartConfig,
+                    plugins: {
+                        ...chartConfig.plugins,
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.parsed.x;
+                                    const pct = ((value / data.total) * 100).toFixed(1);
+                                    return `${value} პასუხი (${pct}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    // Priority Bar Chart
+    if (Object.keys(data.priority).length > 0) {
+        const priorityCanvas = document.getElementById('priorityChart');
+        if (priorityCanvas) {
+            const ctx = priorityCanvas.getContext('2d');
+            const sortedPriority = Object.entries(data.priority).sort((a, b) => b[1] - a[1]);
+            
+            chartInstances.priority = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedPriority.map(([key]) => priorityLabels[key] || key),
+                    datasets: [{
+                        label: 'პასუხები',
+                        data: sortedPriority.map(([, count]) => count),
+                        backgroundColor: '#a8b9e3',
+                        borderColor: '#6c86cf',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    ...chartConfig,
+                    plugins: {
+                        ...chartConfig.plugins,
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.parsed.x;
+                                    const pct = ((value / data.total) * 100).toFixed(1);
+                                    return `${value} პასუხი (${pct}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    // Economy Bar Chart
+    if (Object.keys(data.economy).length > 0) {
+        const economyCanvas = document.getElementById('economyChart');
+        if (economyCanvas) {
+            const ctx = economyCanvas.getContext('2d');
+            const economyOrder = ['very_good', 'good', 'neutral', 'bad', 'very_bad'];
+            const sortedEconomy = economyOrder
+                .filter(key => data.economy[key])
+                .map(key => [key, data.economy[key]]);
+            
+            const colors = ['#4caf50', '#8bc34a', '#ffc107', '#ff9800', '#f44336'];
+            
+            chartInstances.economy = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedEconomy.map(([key]) => economyLabels[key] || key),
+                    datasets: [{
+                        label: 'პასუხები',
+                        data: sortedEconomy.map(([, count]) => count),
+                        backgroundColor: colors.slice(0, sortedEconomy.length),
+                        borderWidth: 1,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    ...chartConfig,
+                    plugins: {
+                        ...chartConfig.plugins,
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.parsed.x;
+                                    const pct = ((value / data.total) * 100).toFixed(1);
+                                    return `${value} პასუხი (${pct}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        }
+    }
+    
+    // Age Bar Chart
+    if (Object.keys(data.age).length > 0) {
+        const ageCanvas = document.getElementById('ageChart');
+        if (ageCanvas) {
+            const ctx = ageCanvas.getContext('2d');
+            const sortedAge = Object.entries(data.age).sort((a, b) => a[0].localeCompare(b[0]));
+            
+            chartInstances.age = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedAge.map(([key]) => key),
+                    datasets: [{
+                        label: 'პასუხები',
+                        data: sortedAge.map(([, count]) => count),
+                        backgroundColor: '#c5d1f0',
+                        borderColor: '#6c86cf',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    ...chartConfig,
+                    plugins: {
+                        ...chartConfig.plugins,
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.parsed.y;
+                                    const pct = ((value / data.total) * 100).toFixed(1);
+                                    return `${value} პასუხი (${pct}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        }
+    }
+}
+        
         
         // Modal setup
         const modal = document.getElementById('modal');
